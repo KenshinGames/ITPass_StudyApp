@@ -156,6 +156,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .actions { margin-top: 16px; display: grid; gap: 10px; }
 .btn { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-weight: 700; }
 .btn.main { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+a.btn { display: block; box-sizing: border-box; text-align: center; text-decoration: none; color: var(--ink); }
 .hint { font-size: 12px; color: var(--sub); text-align: center; margin-top: 8px; }
 
 /* 結果 */

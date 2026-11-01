@@ -369,8 +369,13 @@
       ? 'AIの答えはまちがえることがあります。大事な数値は公式テキストで確かめてください。'
       : 'ChatGPT はログインなしでも無料で使えます。Claude は無料のアカウントが必要です。AIの答えはまちがえることがあるので、大事な数値は公式テキストで確かめてください。';
     // ChatGPT / Claude で聞くボタン。Worker があるときは、答えを受け取れなかったときだけ出す
+    // 本物のリンク(<a target=_blank>)にしておく。埋め込み表示などで window.open が使えない環境でも開けるように、押した瞬間に行き先を作る
+    var aiLinks = {};
     var aiBtns = h('div', { class: 'aibtns', style: CHAT_URL ? 'display:none' : null }, AIS.map(function (ai) {
-      return h('button', { class: 'btn' + (ai.id === lastAi() ? ' main' : ''), onclick: function () { openAi(ai, input.value); } }, [ai.name + 'で聞く ↗']);
+      var a = h('a', { class: 'btn' + (ai.id === lastAi() ? ' main' : ''), href: ai.url, target: '_blank', rel: 'noopener',
+        onclick: function () { a.href = aiUrl(ai, input.value); load().ai = ai.id; save(); } }, [ai.name + 'で聞く ↗']);
+      aiLinks[ai.id] = a;
+      return a;
     }));
 
     function bubble(role, text) {
@@ -385,10 +390,9 @@
       : '分からないところを書いて、聞きたいAIを選んでください。新しいタブで開き、' + (it.topic === 'lesson' ? 'このレッスンの内容' : it.topic === 'free' ? '' : 'この問題・正解・解説') + (it.topic === 'free' ? '' : 'と') + '質問が入った状態になります。\n\n下のボタンで、よくある質問を入れることもできます。']));
 
     function lastAi() { return load().ai || 'chatgpt'; }
-    function openAi(ai, text) {
+    function aiUrl(ai, text) {
       text = (text || '').trim().slice(0, CHAT_MAX_CHARS) || (it.topic === 'lesson' ? 'このレッスンの内容を、もっとかんたんに教えてください。' : it.topic === 'free' ? 'ITパスポート試験に合格するための勉強の進め方を教えてください。' : 'この問題の解説を、もっとかんたんに教えてください。');
-      window.open(ai.url + encodeURIComponent(prefillPrompt(problem, text)), '_blank', 'noopener');
-      load().ai = ai.id; save();
+      return ai.url + encodeURIComponent(prefillPrompt(problem, text));
     }
 
     function setBusy(b) {
@@ -401,7 +405,7 @@
       text = (text || '').trim().slice(0, CHAT_MAX_CHARS);
       if (!text || busy) return;
       if (!CHAT_URL) {   // Enter のときは、前回使った AI で聞く
-        openAi(AIS.filter(function (ai) { return ai.id === lastAi(); })[0] || AIS[0], text);
+        (aiLinks[lastAi()] || aiLinks[AIS[0].id]).click();
         return;
       }
       var empty = list.querySelector('.chatempty');
