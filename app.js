@@ -3,6 +3,9 @@
   'use strict';
 
   var QS = window.QUESTIONS;
+  // 過去問(past.js)は末尾に足す。既存の問題ID(0〜119)とレッスンの対応は変わらない
+  var PAST = window.PAST_QUESTIONS || [];
+  PAST.forEach(function (q) { q.past = true; QS.push(q); });
   var FIELDS = window.FIELDS;
   var GROUPS = window.GROUPS || [];   // 大分類(ストラテジ系・マネジメント系・テクノロジ系)
   var STORE_KEY = 'ipstudy.v1';
@@ -27,7 +30,7 @@
   LESSONS.forEach(function (l) { lessonById[l.id] = l; });
   function lessonsDone() { return load().lessons || {}; }
   function lessonDoneCount() { return LESSONS.filter(function (l) { return lessonsDone()[l.id]; }).length; }
-  var PLAIN = QS;
+  var PLAIN = QS.filter(function (q) { return !q.past; });   // オリジナル問題だけ(分野ドリル・模試・今日の10問の対象)
   function groupOf(fid) { return (fieldById[fid] && fieldById[fid].group) || ''; }
   var groupById = {};
   GROUPS.forEach(function (g) { groupById[g.id] = g; });
@@ -280,6 +283,7 @@
     if (st.v === 'lessons') { lessonList(); return; }
     if (st.v === 'lesson' && lessonById[st.id]) { lessonView(st.id); return; }
     if (st.v === 'guide') { guideView(); return; }
+    if (st.v === 'past' && pastYears().indexOf(st.y) >= 0) { pastMenu(st.y); return; }
     if (st.v && st.v !== 'home') nav({ v: 'home', d: st.d || 0 }, true);
     home(homeY);
   }
@@ -1049,6 +1053,19 @@
       }, !stars.length));
     wrap.appendChild(modes);
 
+    if (PAST.length) {
+      wrap.appendChild(h('div', { class: 'sec' }, ['🏛 過去問(IPA公開問題)で解く']));
+      var pm = h('div', { class: 'modes' });
+      pastYears().forEach(function (y) {
+        var cnt = PAST.filter(function (q) { return q.y === y; }).length;
+        pm.appendChild(mode('📄', yearLabel(y) + 'の過去問(' + cnt + '問)', '実際にCBTで出題された問題100問。1問ごとに解説つき', false, function () {
+          forward({ v: 'past', y: y }); pastMenu(y);
+        }));
+      });
+      wrap.appendChild(pm);
+      wrap.appendChild(h('div', { class: 'hint' }, ['出典:独立行政法人情報処理推進機構(IPA)「ITパスポート試験 公開問題」。解説はこのアプリのオリジナルです']));
+    }
+
     GROUPS.forEach(function (g) {
       wrap.appendChild(h('div', { class: 'sec' }, [g.icon + ' ' + g.name + ':分野ごとに解く']));
       var fl = h('div', { class: 'modes' });
@@ -1263,6 +1280,56 @@
       });
       wrap.appendChild(lm);
     }
+    mount(wrap);
+  }
+
+  /* ---------- 過去問 ---------- */
+  function pastYears() {
+    var ys = [];
+    PAST.forEach(function (q) { if (ys.indexOf(q.y) < 0) ys.push(q.y); });
+    return ys.sort(function (a, b) { return b - a; });
+  }
+  function yearLabel(y) { return '令和' + (y - 2018) + '年度'; }
+
+  // 年度を選んだあと:全問 / 年度別模試 / 未回答・苦手 / 分野ごと
+  function pastMenu(y) {
+    setKeys(null);
+    screen = 'past';
+    var qs = PAST.filter(function (q) { return q.y === y; });
+    var fresh = qs.filter(function (q) { return !recOf(q); });
+    var wrongs = qs.filter(function (q) { var r = recOf(q); return r && r.last === false; });
+
+    var wrap = h('div', { class: 'stack' });
+    wrap.appendChild(h('div', { class: 'qhead' }, [h('button', { class: 'back', onclick: goBack }, ['← ホーム'])]));
+    wrap.appendChild(h('div', { class: 'hero', style: 'padding-top:0' }, [
+      h('h1', { style: 'font-size:22px' }, ['🏛 ' + yearLabel(y) + 'の過去問']),
+      h('p', null, ['IPAが公開している、CBTで実際に出題された100問です。問題の出典は各問題に表示されます'])
+    ]));
+    var modes = h('div', { class: 'modes' });
+    modes.appendChild(mode('▶', '全問(' + qs.length + '問)', 'シャッフルして出題。1問ごとに解説', true, function () {
+      begin({ title: yearLabel(y) + ' 過去問', questions: shuffle(qs) });
+    }));
+    modes.appendChild(mode('⏱', '年度別模試(' + qs.length + '問・' + HONBAN_MINUTES + '分)', 'その年度の問題そのままで本番形式。判定と解説は最後にまとめて', false, function () {
+      begin({ title: yearLabel(y) + ' 年度別模試', mock: true, timed: HONBAN_MINUTES * 60, questions: shuffle(qs) });
+    }));
+    modes.appendChild(mode('🆕', 'まだ解いていない問題(' + fresh.length + '問)', '', false, function () {
+      begin({ title: yearLabel(y) + ' 過去問(未回答)', questions: shuffle(fresh) });
+    }, !fresh.length));
+    modes.appendChild(mode('🔁', 'まちがえた問題(' + wrongs.length + '問)', '', false, function () {
+      begin({ title: yearLabel(y) + ' 過去問(復習)', questions: shuffle(wrongs) });
+    }, !wrongs.length));
+    wrap.appendChild(modes);
+
+    wrap.appendChild(h('div', { class: 'sec' }, ['分野ごとに解く']));
+    var fl = h('div', { class: 'modes' });
+    FIELDS.forEach(function (f) {
+      var fq = qs.filter(function (q) { return q.f === f.id; });
+      if (!fq.length) return;
+      fl.appendChild(mode(f.icon, f.name + '(' + fq.length + '問)', '', false, function () {
+        begin({ title: yearLabel(y) + ' ' + f.name, questions: shuffle(fq) });
+      }));
+    });
+    wrap.appendChild(fl);
     mount(wrap);
   }
 
